@@ -136,7 +136,7 @@ typedef struct sf_block {
     |       payload_size         |          block_size           | alloc  |prv alloc| unused  |
     |                            |     (4 LSB's implicitly 0)    |  (0/1) |  (0/1)  |   (0)   |
     |        (32 bits)           |          (28 bits)            | 1 bit  |  1 bit  |  2 bits |
-    +----------------------------+-------------------------------+--------+---------+---------+
+    +----------------------------+-------------------------------+--------+---------+---------+ <- (aligned)
     |                                                                                         |
     |                                                                                         |
     |                                                                                         |
@@ -146,8 +146,8 @@ typedef struct sf_block {
     |                                                                                         |
     |                                                                                         |
     +----------------------------+-------------------------------+--------+---------+---------+ <- header
-    |         unused             |          unused               | alloc  |prv alloc| unused  |
-    |                            |                               |  (1)   |  (0/1)  |   (0)   | epilogue
+    |         unused             |          unused               | unused |prv alloc| unused  |
+    |                            |                               |  (0)   |  (0/1)  |   (0)   | epilogue
     |        (32 bits)           |          (28 bits)            | 1 bit  |  1 bit  |  2 bits |
     +----------------------------+-------------------------------+--------+---------+---------+ <- heap end
                                                                                                    (aligned)

@@ -4,7 +4,8 @@
 int main(int argc, char const *argv[]) {
     double* ptr = sf_malloc(sizeof(double));
 
-    *ptr = 320320320e-320;
+    //*ptr = 320320320e-320;
+    *ptr = 100;
 
     printf("%f\n", *ptr);
 
