@@ -5,119 +5,101 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "debug.h"
 #include "sfmm.h"
-typedef struct Block {
-    size_t size;
-    struct Block* next;
-} Block;
 
-static Block* g_head = NULL;
+void * sf_find_block(size_t size){
+    // 从sf_free_list_heads查找有无合适的内存块
+    for(int i = 0; i < NUM_FREE_LISTS; i++){
+        
+    }
+    return NULL;
+
+}
 
 void *sf_malloc(size_t size) {
     // To be implemented.
-        if (size == 0) {
-        return NULL;  
-    }
-
-    // 在链表中查找合适的块
-    Block* prev = NULL;
-    Block* curr = g_head;
-
-    while (curr != NULL) {
-        if (curr->size >= size) {
-
-            if (curr->size > size + sizeof(Block)) {
-                Block* newBlock = (Block*)((char*)curr + sizeof(Block) + size);
-                newBlock->size = curr->size - size - sizeof(Block);
-                newBlock->next = curr->next;
-                curr->size = size;
-                curr->next = newBlock;
-            }
-            if (prev != NULL) {
-                prev->next = curr->next;
-            } else {
-                g_head = curr->next;
-            }
-            return (void*)(curr + 1);
-        }
-        prev = curr;
-        curr = curr->next;
-    }
-    size_t totalSize = size + sizeof(Block);
-    curr = (Block*)sf_sbrk(totalSize);
-    if (curr == (void*)-1) {
+    /*
+    if(size == 0){
         return NULL;
     }
-    curr->size = size;
-    curr->next = NULL;
+    int page_num = size / PAGE_SZ  + ((size % PAGE_SZ) ? 1 : 0);  // 计算需要的页数
+    
+    //void *p = NULL;
 
-    return (void*)(curr + 1);
+
+
+    for(int i = 0; i < page_num; i++){
+        //p = sf_mem_grow();
+        for(int i = 0; i < NUM_FREE_LISTS; i++){
+            if(sf_free_list_heads[i].header == 0){
+
+
+            }
+        }
+    }
+    
+    */
+    void *p = sf_mem_grow();
+
+    long *lt = p+8;
+    // header
+    *lt = 0;
+    (*lt) |= size << 32; // payload_size
+    (*lt) |= ((size / 16 + (size % 16) ? 1 : 0 ) * 16 + 16) << 4;  // block_ssize
+    (*lt) |= 1 << 3;  // alloc
+    (*lt) |= 0 << 2;  // prv allock
+
+    lt = p + 16 + (size / 16 + (size % 16) ? 1 : 0 ) * 16 ;
+
+    // footer
+    *lt = 0;
+    (*lt) |= size << 32; // payload_size
+    (*lt) |= ((size / 16 + (size % 16) ? 1 : 0 ) * 16 + 16) << 4;  // block_ssize
+    (*lt) |= 1 << 3;  // alloc
+    (*lt) |= 0 << 2;  // prv allock
+
+    return p+16;
+
+
+    
 }
 
 void sf_free(void *pp) {
     // To be implemented.
-     if (pp == NULL) {
-        return; 
-    }
-
-    Block* block = (Block*)pp - 1;
-
-    Block* prev = NULL;
-    Block* curr = g_head;
-
-    while (curr != NULL && curr < block) {
-        prev = curr;
-        curr = curr->next;
-    }
-
-    if (prev == NULL) {
-        block->next = g_head;
-        g_head = block;
-    } else {
-        block->next = prev->next;
-        prev->next = block;
-    }
-
-    curr = g_head;
-    while (curr != NULL && curr->next != NULL) {
-        if ((char*)curr + curr->size + sizeof(Block) == (char*)curr->next) {
-            curr->size += curr->next->size + sizeof(Block);
-            curr->next = curr->next->next;
-        }
-        curr = curr->next;
-    }
+    long* lt = pp - 8;  // acquire header address
+    (*lt) |= 0 << 3;  // alloc
+    int payload_size = (*lt) >> 32;
+    int size = (payload_size / 16 + (payload_size % 16) ? 1 : 0 ) * 16;
+    lt = (long *)((long int)pp + size);
+    (*lt) |= 0 << 3;  // alloc
 }
 
 void *sf_realloc(void *pp, size_t rsize) {
     // To be implemented.
-        if (rsize == 0) {
-        free(pp);
+    if(pp == NULL){
+        return sf_malloc(rsize);
+    }
+    else if (rsize == 0){
+        sf_free(pp);
         return NULL;
     }
+    else{
+        void *new_ptr = sf_malloc(rsize);
+        if(new_ptr != NULL){
+            unsigned long * lt = pp - 8;  // acquire header address
+            int payload_size = (*lt) >> 32;
+            int old_size = (payload_size / 16 + (payload_size % 16) ? 1 : 0 ) * 16;
 
-    if (pp == NULL) {
-        // 如果原指针为空，等同于 malloc
-        return malloc(rsize);
+            memcpy(new_ptr, pp, old_size < rsize ? old_size:rsize);
+            free(pp);
+        }
+        else{
+            sf_errno = ENOMEM;
+        }
+        return new_ptr;
     }
-
-    // alloc new mem block
-    void* new_ptr = malloc(rsize);
-
-    if (new_ptr == NULL) {
-        return pp;
-    }
-
-    size_t copy_size = rsize;
-    if (copy_size > *((size_t*)pp - 1)) {
-        copy_size = *((size_t*)pp - 1);
-    }
-
-    memcpy(new_ptr, pp, copy_size);
-
-    free(pp);
-
-    return new_ptr;
 }
 
 double sf_fragmentation() {
