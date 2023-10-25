@@ -3,6 +3,7 @@
 #include <signal.h>
 #include "debug.h"
 #include "sfmm.h"
+#include "mysfmm.h"
 #define TEST_TIMEOUT 15
 
 /*
@@ -80,7 +81,7 @@ Test(sfmm_basecode_suite, malloc_too_large, .timeout = TEST_TIMEOUT) {
 	assert_free_block_count(110544, 1);
 	cr_assert(sf_errno == ENOMEM, "sf_errno is not ENOMEM!");
 }
-
+// PASS
 Test(sfmm_basecode_suite, free_no_coalesce, .timeout = TEST_TIMEOUT) {
 	sf_errno = 0;
 	/* void *x = */ sf_malloc(8);
@@ -94,7 +95,7 @@ Test(sfmm_basecode_suite, free_no_coalesce, .timeout = TEST_TIMEOUT) {
 	assert_free_block_count(3760, 1);
 	cr_assert(sf_errno == 0, "sf_errno is not zero!");
 }
-
+// PASS
 Test(sfmm_basecode_suite, free_coalesce, .timeout = TEST_TIMEOUT) {
 	sf_errno = 0;
 	/* void *w = */ sf_malloc(8);

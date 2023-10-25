@@ -179,7 +179,7 @@ int sf_errno;
 
 #define NUM_FREE_LISTS 10
 struct sf_block sf_free_list_heads[NUM_FREE_LISTS];
-
+// 1 2 3 5 8 13 21 34 55 89
 /*
  * This is your implementation of sf_malloc. It acquires uninitialized memory that
  * is aligned and padded properly for the underlying system.
