@@ -18,10 +18,11 @@ int fcflag = 1;  // first call sf_mem_grow
 */
 
 
-const int fi_seq[] = {1, 2, 3, 5, 8, 13, 21, 34, 132, 89 ,144};
+const int fi_seq[] = {1, 2, 3, 5, 8, 13, 21, 34, 125, 100000};
 void *sf_heap_pstart = NULL;
 void *sf_heap_pend = NULL;
 void *sf_heap_use_end = NULL;
+int sf_page_num = 0;
 
 /*According to the requirements of HW3, rewrite section 9.9.12.2 in CSAPP.*/
 size_t sf_pack(size_b psize, size_b bsize, bool alloc, bool prv_alloc)
@@ -107,12 +108,10 @@ int sf_find_fit_index(size_b bsize){
         if( nm <= fi_seq[i])
             break;
     }
-    if(i == 9)
-        i = 8;
     return i;
 }
 void sf_insert_freelist(int i, void *bp){
-    //size_t bsize = sf_get_block_size(sf_hdrp(bp) ) ;
+
     ((sf_block *)bp)->body.links.next = sf_free_list_heads[i].body.links.next;
 
     ((sf_block *)bp)->body.links.prev = &(sf_free_list_heads[i]);
@@ -121,24 +120,30 @@ void sf_insert_freelist(int i, void *bp){
     {
         sf_free_list_heads[i].body.links.prev = bp;
     }
-    
-    //("插入大小：size = %ld\n", bsize);
-    //printf("%s  %d   hdrp = %p, ftrp = %p, header = 0x%016lx, footer = 0x%016lx\n",__func__, __LINE__,sf_hdrp(bp), sf_ftrp(bp), sf_get(sf_hdrp(bp)), sf_get(sf_ftrp(bp)));
-    /* sf_free_list_heads[i].prev_footer is the max block size of sf_free_list_heads[i] */
-    // if(bsize > sf_free_list_heads[i].prev_footer){
-    //     sf_free_list_heads[i].prev_footer = bsize;
-    // }
 }
+bool sf_is_hyblock(void *bp){
+    //size_t *hdrp = sf_hdrp(bp);
+    size_t *ftrp = sf_ftrp(bp);
+    if((void *)ftrp +  HSIZE == sf_heap_use_end){
+        return true;
+    }
+    else
+        return false;
 
+}
 void sf_segre_storage(void *bp){
     size_t *pheader = sf_hdrp(bp);
     size_b bsize = sf_get_block_size(pheader);
+    if(sf_is_hyblock(bp)){
+        sf_insert_freelist(9, bp);
+        return;
+    }
     int i = sf_find_fit_index(bsize);
-    //printf("开始插入链表  i = %d\n", i);
     sf_insert_freelist(i, bp);
 }
 void *sf_heap_grow(){
     void *bp = sf_mem_grow();
+    sf_page_num ++;
     if(fcflag){
         sf_heap_pstart = bp;
         sf_heap_pend = bp + PAGE_SZ;
@@ -170,15 +175,6 @@ void sf_heap_init(){
     ((sf_block *)bp)->body.links.next = NULL;
     ((sf_block *)bp)->body.links.prev = NULL;
 
-
-    // // 设置最后一页
-    // sf_block *last_bp = sf_heap_use_end;
-    // last_bp->body.links.next = &sf_free_list_heads[9];
-    // last_bp->body.links.prev = &sf_free_list_heads[9];
-    // sf_free_list_heads[9].body.links.next = last_bp;
-    // sf_free_list_heads[9].body.links.prev = last_bp;
-
-
     sf_segre_storage(bp);
 }
 void *sf_fb_merge(void *lbp, void *hbp)
@@ -204,12 +200,22 @@ void sf_delete(void *bp)
     }
 
 }
+size_t sf_acquire_hysize()
+{
+        void *hybp = sf_free_list_heads[9].body.links.next;
+        size_t hysize = sf_get_block_size(sf_hdrp(hybp));
+        return hysize;
+}
 void* sf_find_fit(size_t size){
-    // first-fit search
     void *bp = NULL;
-    // find index of sf_free_list_heads
     int i = sf_find_fit_index(size);
-    //printf("查找合适的list， i= %d\n", i);
+    if(i == 9){
+        size_t hysize = sf_acquire_hysize();
+        if(size > hysize){
+            return NULL;
+        }
+
+    }
 
     if(sf_free_list_heads[i].prev_footer >= size){
 
@@ -221,11 +227,10 @@ void* sf_find_fit(size_t size){
         }
     }
     else{
-        for(i = i+1; i < NUM_FREE_LISTS_INSERT; i++){
+        for(i = i+1; i < NUM_FREE_LISTS; i++){
             if(sf_free_list_heads[i].body.links.next != &(sf_free_list_heads[i])){
                 bp = sf_free_list_heads[i].body.links.next;
                 sf_delete(bp);
-                //printf("在其它块找到了可以分配的内存 i = %d\n", i);
                 break;
             }
         }
@@ -252,26 +257,60 @@ void sf_place(sf_block* bp, size_t asize, size_t size)
     size_t *ftrp = sf_ftrp(bp);
     sf_put(ftrp, header);
 
-    /* 分离free块 */
     if(fsize){
         size_t fheader = sf_pack(0, fsize, 0, 1);
         sf_put((void *)ftrp + MRSIZE, fheader);
         sf_put(raw_ftrp, fheader);
-        //printf("%s %d, fhead = 0x%016lx, asize = %ld, fsize = %ld, raw_bsize = %ld\n", __func__, __LINE__, fheader, asize, fsize, raw_bsize);
         sf_segre_storage((void *)ftrp);
     }
 }
-
+void *sf_get_hybp()
+{
+    return sf_free_list_heads[9].body.links.next;
+}
 void *sf_extend_heap(size_t size){
-    int num_page = size / CHUNKSIZE + ((size / CHUNKSIZE) ? 1 : 0);
-    void *p = sf_heap_grow();
-    for(int i = 1; i < num_page; i++){
+    size_t hysize = sf_acquire_hysize();
+    size_t needsize = size - hysize;
+    int flag = 0;
+    int num_page = needsize / CHUNKSIZE + ((needsize % CHUNKSIZE) ? 1 : 0);
+    int i;
+    for(i = 0; i < num_page; i++){
+        if(sf_page_num > 27){
+            flag = 1;
+            i--;
+            break;
+        }
         sf_heap_grow();
     }
-    return p;
+    void *hybp = sf_get_hybp();
+    void *hdrp = sf_hdrp(hybp);
+    
+    size_t hyheader = sf_pack(0, hysize + (i) * CHUNKSIZE, 0, sf_get_prv_alloc(hdrp));
+    
+    sf_put(hdrp, hyheader);
+    void *ftrp = sf_ftrp(hybp);
+    sf_put(ftrp, hyheader);
+    if(flag)
+        return NULL;
+    else{
+        sf_delete(hybp);
+        return hybp;
+    }
+        
 }
 
-
+void my_show_freelists()
+{
+    for(int i = 0; i < NUM_FREE_LISTS; i++){
+        printf("sf_free_list_heads[%d]:  (%p)\n",i,  &sf_free_list_heads[i]);
+        sf_block *tmp = sf_free_list_heads[i].body.links.next;
+        while(tmp && tmp != &sf_free_list_heads[i]){
+            sf_block *bp = sf_free_list_heads[i].body.links.next;
+            printf("bp = %p, prv_bp = %p, hdrp = %p, ftrp = %p, header = 0x%016lx, footer = 0x%016lx\n", bp, sf_free_list_heads[i].body.links.prev,sf_hdrp(bp), sf_ftrp(bp), sf_get(sf_hdrp(bp)), sf_get(sf_ftrp(bp)));
+            tmp = tmp->body.links.next;
+        }
+    }
+}
 void *sf_malloc(size_t size) {
     size_t asize;
     size_t extendsize;
@@ -282,7 +321,6 @@ void *sf_malloc(size_t size) {
     
     if(fcflag){
         sf_heap_init();
-        //printf("首次缺页\n");
         fcflag = 0;
     }
     
@@ -293,16 +331,15 @@ void *sf_malloc(size_t size) {
 
 
     if((bp = sf_find_fit(asize)) != NULL){
-        //printf("malloc  分配到块 %p, asize = %ld\n", bp, asize);
         sf_place(bp, asize, size);
         return sf_bp2pp(bp);
     }
-    
     extendsize = MAX(asize, CHUNKSIZE);
-    if((bp = sf_extend_heap(extendsize / WSIZE)) == NULL){
+    if((bp = sf_extend_heap(extendsize)) == NULL){
         sf_errno = ENOMEM;
         return NULL;
     }
+
     sf_place(bp, asize, size);
     return sf_bp2pp(bp);
 }
@@ -334,7 +371,6 @@ void sf_free(void *pp) {
     sf_put(ftrp, header);
     ((sf_block *)bp)->body.links.next = sf_next_blkp(bp);
     ((sf_block *)bp)->body.links.prev = sf_prev_blkp(bp);
-    //printf("开始free， bp = %p, size = %ld\n", bp, size);
     sf_coalesce(bp);
 }
 
@@ -348,19 +384,52 @@ void *sf_realloc(void *pp, size_t rsize) {
         return NULL;
     }
     else{
-        void *new_ptr = sf_malloc(rsize);
-        if(new_ptr != NULL){
-            unsigned long * lt = pp - 8;  // acquire header address
-            int payload_size = (*lt) >> 32;
-            int old_size = (payload_size / 16 + (payload_size % 16) ? 1 : 0 ) * 16;
+        void *bp = sf_pp2bp(pp);
+        void *hdrp = sf_hdrp(bp);
+        size_t size = sf_get_block_size(hdrp);
+        size_t arsize;
+        if(rsize <= 2 * HSIZE)
+            arsize = 4 * HSIZE;
+        else
+            arsize = (rsize / (2 * HSIZE) + ((rsize % (2 * HSIZE)) ? 1 : 0) + 1) * (2 * HSIZE);
+        if(arsize > size){
+            void *new_ptr = sf_malloc(rsize);
+            if(new_ptr != NULL){
+                unsigned long * lt = pp - 8;  // acquire header address
+                int payload_size = (*lt) >> 32;
+                int old_size = (payload_size / 16 + (payload_size % 16) ? 1 : 0 ) * 16;
 
-            memcpy(new_ptr, pp, old_size < rsize ? old_size:rsize);
-            free(pp);
+                memcpy(new_ptr, pp, old_size < rsize ? old_size:rsize);
+                sf_free(pp);
+            }
+            else{
+                sf_errno = ENOMEM;
+            }
+            return new_ptr;
+
+        }
+        else if(arsize <= size && arsize > (size - M)){
+            return pp;
         }
         else{
-            sf_errno = ENOMEM;
+            size_t fsize = size - arsize;
+            size_t header = sf_pack(rsize, arsize, 1, sf_get_prv_alloc(hdrp));
+            sf_put(hdrp, header);
+            void *ftrp = sf_ftrp(bp);
+            sf_put(ftrp, header);
+            size_t fheader = sf_pack(0, fsize, 0, 1);
+            void *fbp = ftrp;
+            void *fhdrp = sf_hdrp(fbp);
+            sf_put(fhdrp, fheader);
+            void *ffrtp = sf_ftrp(fbp);
+            sf_put(ffrtp, header);
+            sf_free(sf_bp2pp(fbp));
+            return pp;
         }
-        return new_ptr;
+
+
+
+
     }
 }
 

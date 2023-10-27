@@ -30,4 +30,5 @@ size_t *sf_hdrp(void *bp);
 size_t *sf_ftrp(void *bp);
 void *sf_next_blkp(void *bp);
 void *sf_prev_blkp(void *bp);
+void my_show_freelists();
 #endif

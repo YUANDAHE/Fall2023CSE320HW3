@@ -198,3 +198,108 @@ Test(sfmm_basecode_suite, realloc_smaller_block_free_block, .timeout = TEST_TIME
 
 //Test(sfmm_student_suite, student_test_1, .timeout = TEST_TIMEOUT) {
 //}
+
+#include "mysfmm.h"
+Test(sfmm_student_suite, student_test_payload_size, .timeout = TEST_TIMEOUT) {
+	void *x = sf_malloc(sizeof(double) * 8);
+
+	cr_assert_not_null(x, "x is NULL!");
+
+	sf_block *bp = (sf_block *)((char*)x - 2*sizeof(sf_header));
+	size_b x_bs = sf_get_payload_size((size_t *)bp);
+
+	void *y = sf_realloc(x, sizeof(double) * 1024);
+
+	bp = (sf_block *)((char*)y - 2*sizeof(sf_header));
+	size_b y_bs = sf_get_payload_size((size_t *)bp);
+
+	cr_assert_eq(x_bs, 0, "Wrong number of payload (exp=%d, found=%d)",
+		     0, x_bs);
+	cr_assert_eq(y_bs, 0, "Wrong number of payload (exp=%d, found=%d)",
+		     0, y_bs);
+}
+
+
+Test(sfmm_student_suite, student_test_block_size, .timeout = TEST_TIMEOUT) {
+	void *x = sf_malloc(sizeof(double) * 8);
+
+	cr_assert_not_null(x, "x is NULL!");
+
+	sf_block *bp = (sf_block *)((char*)x - 2*sizeof(sf_header));
+	size_b x_bs = sf_get_block_size((size_t *)bp);
+
+	void *y = sf_realloc(x, sizeof(double) * 1024);
+
+	bp = (sf_block *)((char*)y - 2*sizeof(sf_header));
+	size_b y_bs = sf_get_block_size((size_t *)bp);
+
+	cr_assert_eq(x_bs, 0, "Wrong number of free blocks (exp=%d, found=%d)",
+		     0, x_bs);
+	cr_assert_eq(y_bs, 80, "Wrong number of free blocks (exp=%d, found=%d)",
+		     80, y_bs);
+}
+
+
+Test(sfmm_student_suite, student_test_3, .timeout = TEST_TIMEOUT) {
+	size_t r = sf_pack(256, 1024, false, true);
+
+	cr_assert_eq(r, 0x0000010000000404, "Wrong number of SF_BLOCK (exp=0x%016lx, found=0x%016lx)",
+		     0x0000010000000404, r);
+
+	r = sf_pack(0, 0, true, true);
+
+	cr_assert_eq(r, 0xC, "Wrong number of SF_BLOCK (exp=0x%016lx, found=0x%016lx)",
+		     0xC, r);
+
+	r = sf_pack(1, 0, false, false);
+
+	cr_assert_eq(r, 0x0000000100000000, "Wrong number of SF_BLOCK (exp=0x%016lx, found=0x%016lx)",
+		     0x0000000100000000, r);
+
+	r = sf_pack(256, 1024, true, false);
+
+	cr_assert_eq(r, 0x0000010000000408, "Wrong number of SF_BLOCK (exp=0x%016lx, found=0x%016lx)",
+		     0x0000010000000408, r);
+}
+
+
+Test(sfmm_student_suite, student_test_4, .timeout = TEST_TIMEOUT) {
+	void *x = sf_malloc(sizeof(double) * 8);
+
+	cr_assert_not_null(x, "x is NULL!");
+
+	sf_block *bp = (sf_block *)((char*)x - 2*sizeof(sf_header));
+	bool a = sf_get_alloc((size_t *)bp);
+	bool p = sf_get_prv_alloc((size_t *)bp);
+
+	cr_assert(!a,  "ALLOC FLAG is TRUE");
+	cr_assert(!p,  "PREV ALLOC FLAG is TRUE");
+
+}
+
+
+Test(sfmm_student_suite, student_test_5, .timeout = TEST_TIMEOUT) {
+	void *x = sf_malloc(sizeof(double) * 1024);
+
+	cr_assert_not_null(x, "x is NULL!");
+
+	size_t* head_address = sf_hdrp(x);
+	size_t* foot_address = sf_ftrp(x);
+
+
+
+	void *y = sf_realloc(x, sizeof(double) * 256);
+
+	head_address = sf_hdrp(y);
+	foot_address = sf_ftrp(y);
+	cr_assert_not_null(y, "x is NULL!");
+
+	size_t bytes = (char*)foot_address - (char*)head_address;
+	cr_assert(bytes, "bytes zero");
+
+// 	cr_assert_eq((char*)foot_address - (char*)head_address, 0, "Wrong head address (exp=%016lx, found=%016lx)",
+// 		     0, (char*)foot_address - (char*)head_address);
+// 	cr_assert_eq((char*)foot_address - (char*)head_address, 80, "Wrong foot address  (exp=%016lx, found=%016lx)",
+// 		     80, (char*)foot_address - (char*)head_address);
+}
+
